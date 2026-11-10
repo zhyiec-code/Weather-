@@ -13,6 +13,7 @@ let place = store.get('place', HOME);
 let unit = store.get('unit', 'F');
 let lastData = null;
 let lastNws = null;
+let lastRadar = null;
 let lastFetch = 0;
 
 /* ---------- Icons ---------- */
@@ -129,7 +130,7 @@ async function fetchOpenMeteo(lat, lon) {
 }
 
 async function fetchNws(lat, lon) {
-  const out = { alerts: [], periods: [], city: null };
+  const out = { alerts: [], periods: [], city: null, obs: null };
   const la = (+lat).toFixed(4), lo = (+lon).toFixed(4);
   const [pt, al] = await Promise.allSettled([
     fetch(`https://api.weather.gov/points/${la},${lo}`, { headers: { Accept: 'application/geo+json' } }).then((r) => (r.ok ? r.json() : null)),
@@ -142,14 +143,93 @@ async function fetchNws(lat, lon) {
     const rl = pt.value.properties?.relativeLocation?.properties;
     if (rl) out.city = `${rl.city}, ${rl.state}`;
     const url = pt.value.properties?.forecast;
-    if (url) {
-      try {
-        const f = await fetch(url, { headers: { Accept: 'application/geo+json' } }).then((r) => (r.ok ? r.json() : null));
-        out.periods = f?.properties?.periods || [];
-      } catch {}
-    }
+    const stUrl = pt.value.properties?.observationStations;
+    const H = { headers: { Accept: 'application/geo+json' } };
+    await Promise.allSettled([
+      url && fetch(url, H).then((r) => (r.ok ? r.json() : null)).then((f) => { out.periods = f?.properties?.periods || []; }),
+      stUrl && fetch(stUrl, H).then((r) => (r.ok ? r.json() : null)).then(async (st) => {
+        const id = st?.features?.[0]?.properties?.stationIdentifier;
+        if (!id) return;
+        const o = await fetch(`https://api.weather.gov/stations/${id}/observations/latest`, H).then((r) => (r.ok ? r.json() : null));
+        const p = o?.properties;
+        if (p) out.obs = { station: id, text: p.textDescription || '', time: p.timestamp, precip1h: p.precipitationLastHour?.value };
+      }),
+    ]);
   }
   return out;
+}
+
+/* ---------- Live radar at your spot ---------- */
+// Reads the real radar picture at the chosen location so "now" reflects what is actually falling,
+// not only what the model expected. Returns 0 none, 1 light, 2 moderate, 3 heavy; null if unreadable.
+function tileXY(lat, lon, z) {
+  const n = 2 ** z;
+  const x = ((lon + 180) / 360) * n;
+  const r = (lat * Math.PI) / 180;
+  const y = ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n;
+  return { tx: Math.floor(x), ty: Math.floor(y), px: Math.floor((x % 1) * 256), py: Math.floor((y % 1) * 256) };
+}
+function classifyPixel(r, g, b, a) {
+  if (a < 60) return 0;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  if (max - min < 25) return 0; // grey/white map noise
+  let h;
+  const d = max - min;
+  if (max === r) h = (60 * ((g - b) / d) + 360) % 360;
+  else if (max === g) h = 60 * ((b - r) / d) + 120;
+  else h = 60 * ((r - g) / d) + 240;
+  if (h >= 170 && h < 260) return 0.5; // blue: very light echo
+  if (h >= 75 && h < 170) return 1;    // green: light rain
+  if (h >= 42 && h < 75) return 2;     // yellow: moderate
+  return 3;                            // orange, red, magenta: heavy
+}
+async function readTile(url, px, py) {
+  const r = await fetch(url, { mode: 'cors', cache: 'no-store' });
+  if (!r.ok) throw new Error('tile ' + r.status);
+  const bmp = await createImageBitmap(await r.blob());
+  const cv = document.createElement('canvas');
+  cv.width = bmp.width; cv.height = bmp.height;
+  const cx = cv.getContext('2d', { willReadFrequently: true });
+  cx.drawImage(bmp, 0, 0);
+  const R = 3;
+  const x0 = Math.max(0, px - R), y0 = Math.max(0, py - R);
+  const img = cx.getImageData(x0, y0, Math.min(2 * R + 1, cv.width - x0), Math.min(2 * R + 1, cv.height - y0)).data;
+  let best = 0, wet = 0, n = 0;
+  for (let i = 0; i < img.length; i += 4) {
+    const c = classifyPixel(img[i], img[i + 1], img[i + 2], img[i + 3]);
+    n++;
+    if (c >= 1) wet++;
+    best = Math.max(best, c);
+  }
+  // Require several wet pixels so a single speck doesn't count as rain.
+  return wet >= Math.max(3, n * 0.2) ? best : best >= 1 ? 0.5 : best;
+}
+async function sampleRadar(lat, lon) {
+  const z = 10;
+  const t = tileXY(lat, lon, z);
+  try {
+    const v = await readTile(`https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/${z}/${t.tx}/${t.ty}.png?_=${Math.floor(Date.now() / 300000)}`, t.px, t.py);
+    return { level: v, source: 'NEXRAD' };
+  } catch (e) {}
+  try {
+    const m = await fetch('https://api.rainviewer.com/public/weather-maps.json').then((r) => r.json());
+    const last = m.radar.past[m.radar.past.length - 1];
+    const v = await readTile(`${m.host}${last.path}/256/${z}/${t.tx}/${t.ty}/4/0_0.png`, t.px, t.py);
+    return { level: v, source: 'RainViewer' };
+  } catch (e) {}
+  return null;
+}
+const RAIN_WORDS = /rain|shower|drizzle|thunder|storm|precip/i;
+function liveRain() {
+  // Combine the radar reading with the nearest NWS station's latest report.
+  let level = lastRadar?.level ?? null;
+  const o = lastNws?.obs;
+  const fresh = o && Date.now() - Date.parse(o.time) < 90 * 60e3;
+  const stationWet = fresh && RAIN_WORDS.test(o.text);
+  if (level == null) level = stationWet ? 1 : null;
+  else if (level < 1 && stationWet && /rain|shower|thunder/i.test(o.text)) level = 1;
+  const thunder = fresh && /thunder/i.test(o.text);
+  return { level, thunder, station: fresh ? o : null };
 }
 
 /* ---------- Render ---------- */
@@ -162,10 +242,21 @@ function render() {
   let hi0 = H.time.findIndex((t) => t.slice(0, 13) === curKey);
   if (hi0 < 0) hi0 = 0;
 
-  document.body.dataset.sky = skyFor(c.weather_code, c.is_day);
-  $('nowIcon').innerHTML = icon(c.weather_code, c.is_day);
+  const live = liveRain();
+  let code = c.weather_code;
+  const modelWet = code >= 51 && code !== 45 && code !== 48;
+  if (live.level != null && live.level >= 1) {
+    if (live.thunder) code = 95;
+    else if (!modelWet || code < 61) code = live.level >= 3 ? 65 : live.level >= 2 ? 63 : 61;
+  } else if (live.level === 0.5 && !modelWet) {
+    code = 51;
+  } else if (live.level === 0 && modelWet && !live.station) {
+    code = 3; // radar clear at your spot: the model's rain isn't here (yet)
+  }
+  document.body.dataset.sky = skyFor(code, c.is_day);
+  $('nowIcon').innerHTML = icon(code, c.is_day);
   $('nowTemp').textContent = T(c.temperature_2m);
-  $('nowCond').textContent = condText(c.weather_code, c.is_day);
+  $('nowCond').textContent = condText(code, c.is_day);
   $('nowFeels').textContent = T(c.apparent_temperature);
   $('nowHi').textContent = T(D.temperature_2m_max[0]);
   $('nowLo').textContent = T(D.temperature_2m_min[0]);
@@ -198,7 +289,7 @@ function render() {
     al.append(det);
   });
 
-  renderNextHour(c, H, M, hi0);
+  renderNextHour(c, H, M, hi0, live);
 
   // Hourly: next 24h
   let hh = '';
@@ -264,7 +355,7 @@ function uvLevel(u) {
   return '极高';
 }
 
-function renderNextHour(c, H, M, hi0) {
+function renderNextHour(c, H, M, hi0, live) {
   const el = $('nextHour');
   const slots = [];
   if (M && M.time) {
@@ -276,12 +367,23 @@ function renderNextHour(c, H, M, hi0) {
   }
   const prob = Math.max(H.precipitation_probability[hi0] ?? 0, H.precipitation_probability[hi0 + 1] ?? 0);
   const total = slots.reduce((s, x) => s + x.v, 0);
-  const rainingNow = c.precipitation > 0 || (slots[0] && slots[0].v >= 0.004);
+  // The first slot is "now": trust the live radar/station over the model when we have them.
+  if (slots[0] && live && live.level != null) {
+    const lv = live.level;
+    slots[0].live = true;
+    slots[0].lvl = lv;
+    slots[0].modelMissed = lv >= 1 && slots[0].v < 0.004;
+    if (lv >= 1 && slots[0].v < 0.004) slots[0].v = lv >= 3 ? 0.1 : lv >= 2 ? 0.04 : 0.01;
+    if (lv < 1) slots[0].v = lv === 0.5 ? Math.min(slots[0].v, 0.003) : 0;
+  }
+  const rainingNow = (slots[0] && slots[0].v >= 0.004) || (!slots[0]?.live && c.precipitation > 0);
   const firstWet = slots.findIndex((x) => x.v >= 0.004);
   const firstDry = slots.findIndex((x) => x.v < 0.004);
 
   let head;
-  if (rainingNow) {
+  if (rainingNow && slots[0]?.modelMissed) {
+    head = '正在下雨（雷达实测）';
+  } else if (rainingNow) {
     head = firstDry > 0 ? `正在下雨，约 ${firstDry * 15} 分钟后停` : '正在下雨，未来一小时会持续';
   } else if (firstWet > 0) {
     head = `约 ${firstWet * 15} 分钟后开始下雨`;
@@ -295,6 +397,7 @@ function renderNextHour(c, H, M, hi0) {
   const rows = slots.map((x) => {
     const rate = x.v * 4; // inches per hour
     let word = '无雨', cls = 'dry', w = 0;
+    if (x.live && x.lvl === 0.5) { word = '零星'; cls = 'light'; w = 15; }
     if (x.v >= 0.004) {
       if (rate < 0.1) { word = '小雨'; cls = 'light'; w = 33; }
       else if (rate < 0.3) { word = '中雨'; cls = 'mod'; w = 66; }
@@ -304,12 +407,12 @@ function renderNextHour(c, H, M, hi0) {
       <span class="nh-t">${clock(x.t)}–${endOf(x.t)}</span>
       <span class="nh-w">${word}</span>
       <span class="nh-meter"><i style="width:${w}%"></i></span>
-      <span class="nh-a">${x.v >= 0.004 ? rainAmt(x.v) : ''}</span>
+      <span class="nh-a">${x.live ? '雷达实测' : x.v >= 0.004 ? rainAmt(x.v) : ''}</span>
     </div>`;
   }).join('');
   el.innerHTML = `<div class="headline">${head}</div>
     <div class="nh-rows">${rows}</div>
-    <div class="tile-sub nh-foot">这一小时的降雨概率 ${prob}%${total >= 0.004 ? ` · 合计约 ${rainAmt(total)}` : ''}</div>`;
+    <div class="tile-sub nh-foot">这一小时的降雨概率 ${prob}%${total >= 0.004 ? ` · 合计约 ${rainAmt(total)}` : ''}<br>${slots[0]?.live ? (slots[0].modelMissed ? '<b>模型没算到这场雨，后面三行仅供参考，看下面雷达动画里雨区往哪走更准。</b><br>' : '') + '第一行来自实时雷达' + (live.station ? `和 ${live.station.station} 气象站（${live.station.text || '无描述'}）` : '') + '，后面三行是 HRRR 模型预报。' : '这几行都是模型预报，暂时读不到实时雷达。'}</div>`;
 }
 
 /* ---------- Load ---------- */
@@ -317,11 +420,12 @@ async function load(force) {
   if (!force && Date.now() - lastFetch < 60 * 1000) return;
   $('refreshBtn').classList.add('spin');
   try {
-    const [om, nws] = await Promise.all([
+    const [om, nws, rad] = await Promise.all([
       fetchOpenMeteo(place.lat, place.lon),
       fetchNws(place.lat, place.lon).catch(() => null),
+      sampleRadar(place.lat, place.lon).catch(() => null),
     ]);
-    lastData = om; lastNws = nws; lastFetch = Date.now();
+    lastData = om; lastNws = nws; lastRadar = rad; lastFetch = Date.now();
     if (place.auto && nws?.city) { place.name = nws.city; store.set('place', place); $('placeName').textContent = place.name; }
     store.set('cache', { key: place.lat + ',' + place.lon, om, nws, at: lastFetch });
     render();
