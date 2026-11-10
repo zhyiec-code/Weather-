@@ -1,22 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Icon-sized: a circle about the size of a launcher icon, temperature over a weather symbol. -->
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Matches a launcher icon: white circle with temperature + symbol, white label underneath. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="vertical">
     <LinearLayout
-        android:layout_width="64dp"
-        android:layout_height="64dp"
-        android:layout_gravity="center"
+        android:layout_width="54dp"
+        android:layout_height="54dp"
         android:background="@drawable/bg"
         android:gravity="center"
         android:orientation="vertical">
         <TextView android:id="@+id/temp" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="--°" android:textColor="#FFFFFF" android:textSize="19sp" android:includeFontPadding="false"
+            android:text="--°" android:textColor="#1A5DA8" android:textSize="17sp" android:includeFontPadding="false"
             android:fontFamily="sans-serif-medium" />
-        <ImageView android:id="@+id/icon" android:layout_width="24dp" android:layout_height="24dp"
+        <ImageView android:id="@+id/icon" android:layout_width="22dp" android:layout_height="22dp"
+            android:layout_marginTop="1dp"
             android:src="@drawable/ic_partly_day" android:contentDescription="天气" />
-        <TextView android:id="@+id/place" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
-        <TextView android:id="@+id/cond" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
     </LinearLayout>
-</FrameLayout>
+    <TextView android:id="@+id/cond" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="6dp" android:text="" android:textColor="#FFFFFF" android:textSize="13sp"
+        android:maxLines="1" android:ellipsize="end"
+        android:shadowColor="#99000000" android:shadowRadius="4" android:shadowDy="1" />
+    <TextView android:id="@+id/place" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
+</LinearLayout>
