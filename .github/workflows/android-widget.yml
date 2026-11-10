@@ -1,0 +1,51 @@
+name: Build Android widget
+
+on:
+  push:
+    paths: ['android/**', '.github/workflows/android-widget.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      # Signing key: uses the repo secrets KEYSTORE_B64 / KEYSTORE_PASS when set,
+      # otherwise makes a one-off key for this build (a later build then needs a reinstall).
+      - name: Prepare signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASS_SECRET: ${{ secrets.KEYSTORE_PASS }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/ci.keystore"
+            PASS="$KEYSTORE_PASS_SECRET"
+          else
+            PASS="$(openssl rand -hex 16)"
+            keytool -genkeypair -keystore "$RUNNER_TEMP/ci.keystore" -storepass "$PASS" -keypass "$PASS" \
+              -alias qingyu -keyalg RSA -keysize 2048 -validity 20000 -dname "CN=Qingyu Widget"
+          fi
+          echo "::add-mask::$PASS"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/ci.keystore" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASS=$PASS" >> "$GITHUB_ENV"
+      - name: Build APK
+        working-directory: android
+        run: gradle assembleRelease --no-daemon
+      - name: Publish to the "widget" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk qingyu-widget.apk
+          gh release delete widget --yes --cleanup-tag || true
+          gh release create widget qingyu-widget.apk --title "晴雨安卓小组件" \
+            --notes "在安卓手机上下载 qingyu-widget.apk 并安装，然后长按桌面 → 小组件 → 晴雨温度。"
