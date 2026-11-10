@@ -44,6 +44,16 @@ public class WeatherWidget extends AppWidgetProvider {
         }).start();
     }
 
+    @Override
+    public void onReceive(Context ctx, Intent intent) {
+        // After an app update, redraw right away so the new look shows without waiting 30 minutes.
+        if (Intent.ACTION_MY_PACKAGE_REPLACED.equals(intent.getAction())) {
+            refreshAll(ctx);
+            return;
+        }
+        super.onReceive(ctx, intent);
+    }
+
     static void refreshAll(Context ctx) {
         AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
         int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, WeatherWidget.class));
