@@ -318,7 +318,7 @@ function render() {
       <span class="i">${icon(D.weather_code[i], 1)}</span>
       <span class="p">${pp >= 10 ? pp + '%' : ''}</span>
       <span class="lo">${T(D.temperature_2m_min[i])}</span>
-      <span class="range"><i style="left:${a.toFixed(1)}%;right:${(100 - b).toFixed(1)}%"></i></span>
+      <span class="range"><i style="left:${a.toFixed(1)}%;right:${(100 - b).toFixed(1)}%;background:linear-gradient(90deg,${tempColor(D.temperature_2m_min[i])},${tempColor(D.temperature_2m_max[i])})"></i></span>
       <span class="hi">${T(D.temperature_2m_max[i])}</span>
     </div>`;
   }
@@ -345,6 +345,20 @@ function render() {
 
   const ago = Math.round((Date.now() - lastFetch) / 60000);
   $('updated').textContent = lastFetch ? `更新于 ${ago <= 0 ? '刚刚' : ago + ' 分钟前'}` : '';
+}
+
+// Bar colour follows the actual temperature (°F): cold blue → mild green → warm yellow → hot red.
+function tempColor(f) {
+  const stops = [[20, [150, 120, 255]], [40, [90, 160, 255]], [55, [90, 210, 230]], [65, [120, 220, 140]], [75, [255, 210, 90]], [85, [255, 140, 70]], [95, [240, 70, 70]]];
+  if (f <= stops[0][0]) return `rgb(${stops[0][1]})`;
+  for (let k = 1; k < stops.length; k++) {
+    if (f <= stops[k][0]) {
+      const [t0, c0] = stops[k - 1], [t1, c1] = stops[k];
+      const u = (f - t0) / (t1 - t0);
+      return `rgb(${c0.map((v, j) => Math.round(v + (c1[j] - v) * u)).join(',')})`;
+    }
+  }
+  return `rgb(${stops[stops.length - 1][1]})`;
 }
 
 function uvLevel(u) {
@@ -488,9 +502,15 @@ async function initRadar() {
   if (!window.L) { $('radar').textContent = '地图库加载失败'; return; }
   // One finger scrolls the page; pinch zooms. Tap 放大 to pan the map freely in full screen.
   map = L.map('radar', { zoomControl: false, attributionControl: true, dragging: false, tap: false }).setView([place.lat, place.lon], 8);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd', maxZoom: 13, attribution: '© OpenStreetMap © CARTO',
+  // Esri light-grey basemap (free, no key). Place labels sit in their own pane above the radar.
+  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
+  L.tileLayer(ESRI + 'World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 13, detectRetina: true, attribution: 'Esri, HERE, Garmin, © OpenStreetMap',
   }).addTo(map);
+  map.createPane('labels');
+  map.getPane('labels').style.zIndex = 450;
+  map.getPane('labels').style.pointerEvents = 'none';
+  L.tileLayer(ESRI + 'World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { maxZoom: 13, pane: 'labels' }).addTo(map);
   $('radarFull').addEventListener('click', toggleFull);
   hereMarker = L.marker([place.lat, place.lon], { icon: L.divIcon({ className: '', html: '<div class="here-dot"></div>', iconSize: [14, 14] }) }).addTo(map);
   $('radarSlider').addEventListener('input', (e) => { stop(); showFrame(+e.target.value); });

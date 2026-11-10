@@ -146,7 +146,7 @@ button:focus-visible, input:focus-visible, .hourly:focus-visible { outline: 2px 
 .dy .lo { text-align: right; color: var(--ink-soft); }
 .dy .hi { text-align: left; font-weight: 600; }
 .range { position: relative; height: 5px; border-radius: 3px; background: rgba(255,255,255,.15); }
-.range i { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: linear-gradient(90deg, #7cc8ff, #ffd36b, #ff8a4c); }
+.range i { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: #ffd36b; }
 
 /* Radar */
 .radar { height: 300px; border-radius: 12px; overflow: hidden; background: #c9d6df; max-width: 100%; }
