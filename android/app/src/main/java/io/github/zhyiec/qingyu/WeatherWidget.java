@@ -73,7 +73,10 @@ public class WeatherWidget extends AppWidgetProvider {
             String url = "https://api.open-meteo.com/v1/forecast?latitude=" + loc[0] + "&longitude=" + loc[1]
                     + "&current=temperature_2m,weather_code,is_day&temperature_unit=fahrenheit&timezone=auto";
             JSONObject cur = new JSONObject(get(url)).getJSONObject("current");
-            int temp = (int) Math.round(cur.getDouble("temperature_2m"));
+            double tf = cur.getDouble("temperature_2m");
+            Double obs = stationTempF(ctx, loc);
+            if (obs != null) tf = obs; // real thermometer beats the model estimate
+            int temp = (int) Math.round(tf);
             int code = cur.getInt("weather_code");
             boolean day = cur.getInt("is_day") == 1;
             v.setTextViewText(R.id.temp, temp + "°");
@@ -111,6 +114,31 @@ public class WeatherWidget extends AppWidgetProvider {
         return new double[]{HOME_LAT, HOME_LON};
     }
 
+    /** Latest reading from the nearest NWS station if it is under 90 minutes old, else null. */
+    static Double stationTempF(Context ctx, double[] loc) {
+        try {
+            SharedPreferences sp = ctx.getSharedPreferences("w", Context.MODE_PRIVATE);
+            String key = String.format(Locale.US, "%.2f,%.2f", loc[0], loc[1]);
+            String station = key.equals(sp.getString("stKey", "")) ? sp.getString("st", null) : null;
+            if (station == null) {
+                JSONObject pt = new JSONObject(get("https://api.weather.gov/points/" + key));
+                String stUrl = pt.getJSONObject("properties").getString("observationStations");
+                station = new JSONObject(get(stUrl)).getJSONArray("features").getJSONObject(0)
+                        .getJSONObject("properties").getString("stationIdentifier");
+                sp.edit().putString("stKey", key).putString("st", station).apply();
+            }
+            JSONObject p = new JSONObject(get("https://api.weather.gov/stations/" + station + "/observations/latest"))
+                    .getJSONObject("properties");
+            long t = java.time.OffsetDateTime.parse(p.getString("timestamp")).toInstant().toEpochMilli();
+            if (System.currentTimeMillis() - t > 90 * 60 * 1000L) return null;
+            JSONObject temp = p.getJSONObject("temperature");
+            if (temp.isNull("value")) return null;
+            return temp.getDouble("value") * 9 / 5 + 32;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     static String placeName(Context ctx, double[] loc) {
         if (loc[0] == HOME_LAT && loc[1] == HOME_LON) return "Memorial";
         try {
@@ -129,6 +157,8 @@ public class WeatherWidget extends AppWidgetProvider {
         HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
         c.setConnectTimeout(10000);
         c.setReadTimeout(10000);
+        c.setRequestProperty("User-Agent", "QingyuWidget/1.6 (personal weather widget)");
+        c.setRequestProperty("Accept", "application/geo+json, application/json");
         try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream()))) {
             StringBuilder sb = new StringBuilder();
             String line;

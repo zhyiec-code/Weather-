@@ -149,10 +149,11 @@ async function fetchNws(lat, lon) {
       url && fetch(url, H).then((r) => (r.ok ? r.json() : null)).then((f) => { out.periods = f?.properties?.periods || []; }),
       stUrl && fetch(stUrl, H).then((r) => (r.ok ? r.json() : null)).then(async (st) => {
         const id = st?.features?.[0]?.properties?.stationIdentifier;
+        const sname = st?.features?.[0]?.properties?.name || id;
         if (!id) return;
         const o = await fetch(`https://api.weather.gov/stations/${id}/observations/latest`, H).then((r) => (r.ok ? r.json() : null));
         const p = o?.properties;
-        if (p) out.obs = { station: id, text: p.textDescription || '', time: p.timestamp, precip1h: p.precipitationLastHour?.value };
+        if (p) out.obs = { station: id, name: sname, text: p.textDescription || '', time: p.timestamp, precip1h: p.precipitationLastHour?.value, tempC: p.temperature?.value };
       }),
     ]);
   }
@@ -255,7 +256,14 @@ function render() {
   }
   document.body.dataset.sky = skyFor(code, c.is_day);
   $('nowIcon').innerHTML = icon(code, c.is_day);
-  $('nowTemp').textContent = T(c.temperature_2m);
+  // Prefer the nearest NWS station's thermometer reading when it is recent; the model value is an estimate.
+  const ob = lastNws?.obs;
+  const obAge = ob ? (Date.now() - Date.parse(ob.time)) / 60000 : Infinity;
+  const useObs = ob && ob.tempC != null && obAge < 90;
+  $('nowTemp').textContent = T(useObs ? ob.tempC * 9 / 5 + 32 : c.temperature_2m);
+  $('nowSource').textContent = useObs
+    ? `气温为 ${ob.name} 气象站实测（${Math.max(1, Math.round(obAge))} 分钟前）`
+    : '气温为模型估算（附近气象站暂无最新数据）';
   $('nowCond').textContent = condText(code, c.is_day);
   $('nowFeels').textContent = T(c.apparent_temperature);
   $('nowHi').textContent = T(D.temperature_2m_max[0]);
