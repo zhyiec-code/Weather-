@@ -318,35 +318,84 @@ async function load(force) {
 }
 
 /* ---------- Radar ---------- */
-const FRAMES = ['m50m', 'm45m', 'm40m', 'm35m', 'm30m', 'm25m', 'm20m', 'm15m', 'm10m', 'm05m', ''];
-let map, radarLayers = [], frame = FRAMES.length - 1, playing = null, hereMarker;
-function initRadar() {
+// Past: observed NEXRAD composite, every 5 min for the last 50 min.
+// Future: HRRR model simulated reflectivity, every 15 min for the next 3 hours.
+const IEM = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/';
+const PAST = ['m50m', 'm45m', 'm40m', 'm35m', 'm30m', 'm25m', 'm20m', 'm15m', 'm10m', 'm05m', ''];
+const FUTURE_STEPS = 12; // 12 × 15 min = 3 h
+let map, frames = [], radarLayers = [], frame = 0, nowIdx = PAST.length - 1, playing = null, hereMarker;
+
+async function hrrrInit() {
+  // Latest HRRR run time published by IEM; fall back to an estimate (runs arrive ~2 h after start).
+  try {
+    const r = await fetch('https://mesonet.agron.iastate.edu/data/gis/images/4326/hrrr/refd_0000.json', { cache: 'no-store' });
+    const j = await r.json();
+    const t = Date.parse(j.model_init_utc);
+    if (t) return t;
+  } catch {}
+  const h = 3600e3;
+  return Math.floor((Date.now() - 2 * h) / h) * h;
+}
+
+function clockLabel(ms) {
+  const d = new Date(ms);
+  return d.toLocaleTimeString('zh-CN', { hour: 'numeric', minute: '2-digit', hour12: false });
+}
+
+async function buildFrames() {
+  const v = Math.floor(Date.now() / 300000);
+  const out = PAST.map((f, k) => {
+    const mins = (PAST.length - 1 - k) * 5;
+    return { url: `${IEM}nexrad-n0q-900913${f ? '-' + f : ''}/{z}/{x}/{y}.png?_=${v}`, label: mins ? `${mins} 分钟前` : '现在', future: false };
+  });
+  const init = await hrrrInit();
+  const q = 15 * 60e3;
+  const now = Date.now();
+  const seen = new Set();
+  for (let k = 1; k <= FUTURE_STEPS; k++) {
+    const valid = Math.round((now + k * q) / q) * q;
+    const fmin = Math.round((valid - init) / 60e3);
+    if (fmin < 15 || fmin > 18 * 60 || seen.has(fmin)) continue;
+    seen.add(fmin);
+    const F = String(fmin).padStart(4, '0');
+    out.push({ url: `${IEM}hrrr::REFD-F${F}-0/{z}/{x}/{y}.png?_=${Math.floor(init / 60000)}`, label: `预报 ${clockLabel(valid)}`, future: true });
+  }
+  return out;
+}
+
+async function initRadar() {
   if (!window.L) { $('radar').textContent = '地图库加载失败'; return; }
   map = L.map('radar', { zoomControl: false, attributionControl: true }).setView([place.lat, place.lon], 8);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     subdomains: 'abc', maxZoom: 12, attribution: '© OpenStreetMap',
   }).addTo(map);
-  const ts = Date.now();
-  radarLayers = FRAMES.map((f) =>
-    L.tileLayer(`https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913${f ? '-' + f : ''}/{z}/{x}/{y}.png?_=${Math.floor(ts / 300000)}`, {
-      opacity: 0, maxZoom: 12, attribution: 'NEXRAD via IEM',
-    }).addTo(map)
-  );
   hereMarker = L.marker([place.lat, place.lon], { icon: L.divIcon({ className: '', html: '<div class="here-dot"></div>', iconSize: [14, 14] }) }).addTo(map);
-  showFrame(FRAMES.length - 1);
   $('radarSlider').addEventListener('input', (e) => { stop(); showFrame(+e.target.value); });
   $('radarPlay').addEventListener('click', () => (playing ? stop() : play()));
+  await loadFrames();
 }
+
+async function loadFrames() {
+  frames = await buildFrames();
+  radarLayers.forEach((l) => map.removeLayer(l));
+  radarLayers = frames.map((f) => L.tileLayer(f.url, { opacity: 0, maxZoom: 12, attribution: 'NEXRAD / HRRR via IEM' }).addTo(map));
+  $('radarSlider').max = frames.length - 1;
+  $('radarNowMark').style.left = (nowIdx / (frames.length - 1)) * 100 + '%';
+  showFrame(nowIdx);
+}
+
 function showFrame(i) {
   frame = i;
   radarLayers.forEach((l, k) => l.setOpacity(k === i ? 0.7 : 0));
   $('radarSlider').value = i;
-  const mins = (FRAMES.length - 1 - i) * 5;
-  $('radarTime').textContent = mins === 0 ? '现在' : `${mins} 分钟前`;
+  const f = frames[i];
+  $('radarTime').textContent = f.label;
+  $('radarTime').classList.toggle('future', f.future);
+  $('radar').classList.toggle('future', f.future);
 }
 function play() {
   $('radarPlay').textContent = '暂停';
-  playing = setInterval(() => showFrame(frame >= FRAMES.length - 1 ? 0 : frame + 1), 500);
+  playing = setInterval(() => showFrame(frame >= frames.length - 1 ? 0 : frame + 1), 550);
 }
 function stop() {
   if (playing) clearInterval(playing);
@@ -355,8 +404,8 @@ function stop() {
 }
 function refreshRadar() {
   if (!map) return;
-  const v = Math.floor(Date.now() / 300000);
-  radarLayers.forEach((l, k) => l.setUrl(`https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913${FRAMES[k] ? '-' + FRAMES[k] : ''}/{z}/{x}/{y}.png?_=${v}`));
+  stop();
+  loadFrames();
 }
 
 /* ---------- Place picker ---------- */
@@ -429,7 +478,7 @@ if (cached && cached.key === place.lat + ',' + place.lon) {
   lastData = cached.om; lastNws = cached.nws; lastFetch = cached.at;
   try { render(); } catch {}
 }
-try { initRadar(); } catch (e) { console.error(e); }
+initRadar().catch((e) => console.error(e));
 load(true);
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {

@@ -78,10 +78,13 @@
     <div id="radar" class="radar"></div>
     <div class="radar-bar">
       <button id="radarPlay" class="chip" type="button">播放</button>
-      <input id="radarSlider" type="range" min="0" max="10" value="10" aria-label="雷达时间">
+      <div class="slider-wrap">
+        <input id="radarSlider" type="range" min="0" max="10" value="10" aria-label="雷达时间">
+        <i id="radarNowMark" class="now-mark"></i>
+      </div>
       <span id="radarTime" class="radar-time">现在</span>
     </div>
-    <p class="fine">NOAA MRMS/NEXRAD 雷达，来自 Iowa Environmental Mesonet，每 5 分钟更新。</p>
+    <p class="fine">滑块左边是过去 50 分钟的实测雷达（NOAA NEXRAD），右边是未来 3 小时的预报回波（NOAA HRRR 模型，每 15 分钟一帧）。预报是模型推算，越远越不准。数据来自 Iowa Environmental Mesonet。</p>
   </section>
 
   <section class="grid2">
