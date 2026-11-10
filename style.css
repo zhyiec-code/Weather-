@@ -193,3 +193,6 @@ button:focus-visible, input:focus-visible, .hourly:focus-visible { outline: 2px 
 .card.full .radar { flex: 1; height: auto; }
 .card.full .fine { display: none; }
 body.noscroll { overflow: hidden; }
+
+.radar-pane { filter: blur(1.6px) saturate(1.15); }
+.leaflet-pane.leaflet-labels-pane, .leaflet-labels-pane img { image-rendering: auto; }

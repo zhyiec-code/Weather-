@@ -510,7 +510,11 @@ async function initRadar() {
   map.createPane('labels');
   map.getPane('labels').style.zIndex = 450;
   map.getPane('labels').style.pointerEvents = 'none';
-  L.tileLayer(ESRI + 'World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { maxZoom: 13, pane: 'labels' }).addTo(map);
+  L.tileLayer(ESRI + 'World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { maxZoom: 13, pane: 'labels', detectRetina: true }).addTo(map);
+  // Radar gets its own pane so it can be softened as one image (no blocky 1 km cells, no tile seams).
+  map.createPane('radar');
+  map.getPane('radar').style.zIndex = 350;
+  map.getPane('radar').classList.add('radar-pane');
   $('radarFull').addEventListener('click', toggleFull);
   hereMarker = L.marker([place.lat, place.lon], { icon: L.divIcon({ className: '', html: '<div class="here-dot"></div>', iconSize: [14, 14] }) }).addTo(map);
   $('radarSlider').addEventListener('input', (e) => { stop(); showFrame(+e.target.value); });
@@ -522,7 +526,7 @@ async function loadFrames() {
   frames = await buildFrames();
   radarLayers.forEach((l) => map.removeLayer(l));
   // Layers join the map only when first shown (plus the next one ahead), to keep data use down.
-  radarLayers = frames.map((f) => L.tileLayer(f.url, { opacity: 0, maxZoom: 13, maxNativeZoom: 11, detectRetina: true, attribution: 'NEXRAD / HRRR via IEM' }));
+  radarLayers = frames.map((f) => L.tileLayer(f.url, { pane: 'radar', opacity: 0, maxZoom: 13, maxNativeZoom: 11, detectRetina: true, attribution: 'NEXRAD / HRRR via IEM' }));
   $('radarSlider').max = frames.length - 1;
   $('radarNowMark').style.left = (nowIdx / (frames.length - 1)) * 100 + '%';
   showFrame(nowIdx);
