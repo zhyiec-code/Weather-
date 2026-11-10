@@ -77,14 +77,18 @@
     <div class="card-head"><h2>雷达</h2><button id="radarFull" class="chip" type="button">放大</button></div>
     <div id="radar" class="radar"></div>
     <div class="radar-bar">
-      <button id="radarPlay" class="chip" type="button">播放</button>
-      <div class="slider-wrap">
-        <input id="radarSlider" type="range" min="0" max="10" value="10" aria-label="雷达时间">
-        <i id="radarNowMark" class="now-mark"></i>
-      </div>
-      <span id="radarTime" class="radar-time">现在</span>
+      <button id="radarPlay" class="play" type="button" aria-label="播放">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path id="playIcon" d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>
+      </button>
+      <div class="radar-when"><b id="radarTime">现在</b><span id="radarKind" class="kind">实测</span></div>
     </div>
-    <p class="fine">单指滑动是翻页面，双指可缩放地图，点“放大”可以全屏拖动地图。滑块左边是过去 50 分钟的实测雷达（NOAA NEXRAD），右边是未来 12 小时的预报回波（NOAA HRRR 模型；前 2 小时每 15 分钟一帧，之后每小时一帧）。预报是模型推算，越远越不准。数据来自 Iowa Environmental Mesonet。</p>
+    <div class="timeline">
+      <div id="radarNowLabel" class="now-label">现在</div>
+      <input id="radarSlider" type="range" min="0" max="10" value="10" aria-label="雷达时间">
+      <div id="radarTicks" class="ticks"></div>
+    </div>
+    <div class="legend"><span>小雨</span><i></i><span>大雨</span></div>
+    <p class="fine">“现在”左边是过去 50 分钟的实测雷达（NOAA NEXRAD），右边是未来 12 小时的预报（NOAA HRRR 模型，越远越不准）。双指缩放，点“放大”可拖动地图。</p>
   </section>
 
   <section class="grid2">

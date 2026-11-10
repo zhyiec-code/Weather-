@@ -149,14 +149,8 @@ button:focus-visible, input:focus-visible, .hourly:focus-visible { outline: 2px 
 .range i { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: #ffd36b; }
 
 /* Radar */
-.radar { height: 420px; border-radius: 12px; overflow: hidden; background: #c9d6df; max-width: 100%; }
-.radar-bar { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-.slider-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
-.slider-wrap input { flex: 1; min-width: 0; accent-color: #fff; }
-.now-mark { position: absolute; top: -6px; width: 2px; height: 6px; background: var(--ink-soft); pointer-events: none; }
-.radar-time.future { color: var(--warn); }
+.radar { height: 440px; border-radius: 12px; overflow: hidden; background: #c9d6df; max-width: 100%; }
 .radar.future { box-shadow: inset 0 0 0 2px var(--warn); }
-.radar-time { font-size: 13px; color: var(--ink-soft); width: 108px; text-align: right; font-variant-numeric: tabular-nums; }
 .fine { margin: 8px 0 0; font-size: 11px; color: var(--ink-faint); }
 .leaflet-container { font: inherit; }
 .leaflet-control-attribution { font-size: 9px; }
@@ -194,5 +188,23 @@ button:focus-visible, input:focus-visible, .hourly:focus-visible { outline: 2px 
 .card.full .fine { display: none; }
 body.noscroll { overflow: hidden; }
 
-.radar-pane { filter: blur(1.6px) saturate(1.15); }
 .leaflet-pane.leaflet-labels-pane, .leaflet-labels-pane img { image-rendering: auto; }
+
+/* Radar controls, styled after a broadcast-radar timeline */
+.radar-pane { filter: blur(0.6px); }
+.radar-bar { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.play { width: 40px; height: 40px; flex: none; border-radius: 50%; border: 0; background: var(--ink); color: var(--sky-top); display: grid; place-items: center; }
+.radar-when { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.radar-when b { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kind { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: rgba(255,255,255,.16); color: var(--ink-soft); }
+.kind.future { background: rgba(255,207,92,.22); color: var(--warn); }
+.timeline { position: relative; margin-top: 22px; }
+.timeline input { width: 100%; margin: 0; accent-color: #fff; }
+.now-label { position: absolute; top: -18px; transform: translateX(-50%); font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--ink); pointer-events: none; }
+.now-label::after { content: ""; position: absolute; left: 50%; top: 15px; width: 2px; height: 6px; margin-left: -1px; background: var(--ink); }
+.ticks { position: relative; height: 18px; margin-top: 4px; font-size: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+.ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.ticks span.fut { color: var(--ink-soft); }
+.legend { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 11px; color: var(--ink-faint); }
+.legend i { flex: 1; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #04e9e7, #019ff4, #02fd02, #01c501, #008e00, #fdf802, #e5bc00, #fd9500, #fd0000, #d40000, #f800fd); max-width: 220px; }
+.radar.future { box-shadow: inset 0 0 0 2px var(--warn); }

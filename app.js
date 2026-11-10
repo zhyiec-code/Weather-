@@ -480,7 +480,8 @@ async function buildFrames() {
   const v = Math.floor(Date.now() / 300000);
   const out = PAST.map((f, k) => {
     const mins = (PAST.length - 1 - k) * 5;
-    return { url: `${IEM}nexrad-n0q-900913${f ? '-' + f : ''}/{z}/{x}/{y}.png?_=${v}`, label: mins ? `${mins} 分钟前` : '现在', future: false };
+    const t = Math.floor(Date.now() / 300000) * 300000 - mins * 60e3;
+    return { url: `${IEM}nexrad-n0q-900913${f ? '-' + f : ''}/{z}/{x}/{y}.png?_=${v}`, t, label: mins ? clockLabel(t) : '现在', future: false, nz: 7 };
   });
   const init = await hrrrInit();
   const q = 15 * 60e3;
@@ -493,7 +494,7 @@ async function buildFrames() {
     if (fmin < 15 || fmin > 18 * 60 || seen.has(fmin)) continue;
     seen.add(fmin);
     const F = String(fmin).padStart(4, '0');
-    out.push({ url: `${IEM}hrrr::REFD-F${F}-0/{z}/{x}/{y}.png?_=${Math.floor(init / 60000)}`, label: `预报 ${clockLabel(valid)}`, future: true });
+    out.push({ url: `${IEM}hrrr::REFD-F${F}-0/{z}/{x}/{y}.png?_=${Math.floor(init / 60000)}`, t: valid, label: clockLabel(valid), future: true, nz: 6 });
   }
   return out;
 }
@@ -501,7 +502,7 @@ async function buildFrames() {
 async function initRadar() {
   if (!window.L) { $('radar').textContent = '地图库加载失败'; return; }
   // One finger scrolls the page; pinch zooms. Tap 放大 to pan the map freely in full screen.
-  map = L.map('radar', { zoomControl: false, attributionControl: true, dragging: false, tap: false }).setView([place.lat, place.lon], 9);
+  map = L.map('radar', { zoomControl: false, attributionControl: true, dragging: false, tap: false }).setView([place.lat, place.lon], 8);
   // Esri light-grey basemap (free, no key). Place labels sit in their own pane above the radar.
   const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
   L.tileLayer(ESRI + 'World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
@@ -510,6 +511,8 @@ async function initRadar() {
   map.createPane('labels');
   map.getPane('labels').style.zIndex = 450;
   map.getPane('labels').style.pointerEvents = 'none';
+  // Highways, road names and route shields, then place names, both drawn above the radar.
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxZoom: 13, pane: 'labels', opacity: 0.9 }).addTo(map);
   L.tileLayer(ESRI + 'World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { maxZoom: 13, pane: 'labels', detectRetina: true }).addTo(map);
   // Radar gets its own pane so it can be softened as one image (no blocky 1 km cells, no tile seams).
   map.createPane('radar');
@@ -526,20 +529,32 @@ async function loadFrames() {
   frames = await buildFrames();
   radarLayers.forEach((l) => map.removeLayer(l));
   // Layers join the map only when first shown (plus the next one ahead), to keep data use down.
-  radarLayers = frames.map((f) => L.tileLayer(f.url, { pane: 'radar', opacity: 0, maxZoom: 13, maxNativeZoom: 11, detectRetina: true, attribution: 'NEXRAD / HRRR via IEM' }));
+  radarLayers = frames.map((f) => // Coarse tiles scaled up by the browser read as smooth rain shapes instead of 1 km blocks.
+  L.tileLayer(f.url, { pane: 'radar', opacity: 0, maxZoom: 13, maxNativeZoom: f.nz, attribution: 'NEXRAD / HRRR via IEM' }));
   $('radarSlider').max = frames.length - 1;
-  $('radarNowMark').style.left = (nowIdx / (frames.length - 1)) * 100 + '%';
+  const pos = (k) => `calc(${(k / (frames.length - 1)) * 100}% + ${(0.5 - k / (frames.length - 1)) * 16}px)`;
+  $('radarNowLabel').style.left = pos(nowIdx);
+  let ticks = '', lastPct = -100, lastHour = null;
+  frames.forEach((f, k) => {
+    const d = new Date(f.t);
+    const pct = (k / (frames.length - 1)) * 100;
+    if (k === nowIdx || d.getMinutes() !== 0 || d.getHours() === lastHour || pct - lastPct < 11 || Math.abs(k - nowIdx) < 2) return;
+    lastPct = pct; lastHour = d.getHours();
+    ticks += `<span class="${f.future ? 'fut' : ''}" style="left:${pos(k)}">${d.getHours()}时</span>`;
+  });
+  $('radarTicks').innerHTML = ticks;
   showFrame(nowIdx);
 }
 
 function showFrame(i) {
   frame = i;
   [i, i + 1].forEach((k) => { if (radarLayers[k] && !map.hasLayer(radarLayers[k])) radarLayers[k].addTo(map); });
-  radarLayers.forEach((l, k) => l.setOpacity(k === i ? 0.75 : 0));
+  radarLayers.forEach((l, k) => l.setOpacity(k === i ? 0.85 : 0));
   $('radarSlider').value = i;
   const f = frames[i];
   $('radarTime').textContent = f.label;
-  $('radarTime').classList.toggle('future', f.future);
+  $('radarKind').textContent = f.future ? '预报' : '实测';
+  $('radarKind').classList.toggle('future', f.future);
   $('radar').classList.toggle('future', f.future);
 }
 function toggleFull() {
@@ -553,13 +568,13 @@ function toggleFull() {
 }
 const zoomCtl = window.L ? L.control.zoom({ position: 'topright' }) : null;
 function play() {
-  $('radarPlay').textContent = '暂停';
+  $('playIcon').setAttribute('d', 'M6 4.5h4v15H6zM14 4.5h4v15h-4z');
   playing = setInterval(() => showFrame(frame >= frames.length - 1 ? 0 : frame + 1), 600);
 }
 function stop() {
   if (playing) clearInterval(playing);
   playing = null;
-  $('radarPlay').textContent = '播放';
+  $('playIcon').setAttribute('d', 'M7 4.5v15l12-7.5z');
 }
 function refreshRadar() {
   if (!map) return;
@@ -573,7 +588,7 @@ function setPlace(p) {
   store.set('place', p);
   $('placeName').textContent = p.name;
   $('search').hidden = true;
-  if (map) { map.setView([p.lat, p.lon], 9); hereMarker.setLatLng([p.lat, p.lon]); }
+  if (map) { map.setView([p.lat, p.lon], 8); hereMarker.setLatLng([p.lat, p.lon]); }
   load(true);
 }
 $('placeBtn').addEventListener('click', () => {
