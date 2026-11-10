@@ -113,11 +113,16 @@ button:focus-visible, input:focus-visible, .hourly:focus-visible { outline: 2px 
 
 /* Next hour */
 .next-hour .headline { font-size: 17px; font-weight: 600; margin-bottom: 10px; }
-.nh-bars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; align-items: end; height: 70px; }
-.nh-bar { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 4px; }
-.nh-bar i { display: block; width: 100%; max-width: 48px; border-radius: 6px 6px 2px 2px; background: var(--rain); min-height: 3px; opacity: .9; }
-.nh-bar span { font-size: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
-.nh-labels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 4px; text-align: center; font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.nh-rows { display: flex; flex-direction: column; }
+.nh-row { display: grid; grid-template-columns: 96px 40px 1fr 64px; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--panel-line); font-variant-numeric: tabular-nums; }
+.nh-row:first-child { border-top: 0; }
+.nh-t { color: var(--ink-soft); font-size: 14px; }
+.nh-w { font-weight: 600; }
+.nh-row.dry .nh-w { color: var(--ink-faint); font-weight: 500; }
+.nh-meter { height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+.nh-meter i { display: block; height: 100%; border-radius: 4px; background: var(--rain); }
+.nh-a { text-align: right; font-size: 13px; color: var(--rain); }
+.nh-foot { margin-top: 8px; }
 
 /* Hourly */
 .hourly { display: flex; gap: 4px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }

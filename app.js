@@ -212,6 +212,7 @@ function render() {
     </div>`;
   }
   $('hourly').innerHTML = hh;
+  $('hourly').scrollLeft = 0;
 
   // Daily
   const lo = Math.min(...D.temperature_2m_min), hi = Math.max(...D.temperature_2m_max);
@@ -284,17 +285,31 @@ function renderNextHour(c, H, M, hi0) {
     head = firstDry > 0 ? `正在下雨，约 ${firstDry * 15} 分钟后停` : '正在下雨，未来一小时会持续';
   } else if (firstWet > 0) {
     head = `约 ${firstWet * 15} 分钟后开始下雨`;
-  } else if (prob >= 30) {
-    head = '未来一小时可能有零星降雨';
+  } else if (prob >= 40) {
+    head = '未来一小时预计无雨，但有下雨的可能';
   } else {
     head = '未来一小时不会下雨';
   }
-  const max = Math.max(0.05, ...slots.map((x) => x.v));
-  const bars = slots.map((x) => `<div class="nh-bar"><span>${x.v >= 0.004 ? rainAmt(x.v).replace(' in', '').replace(' mm', '') : ''}</span><i style="height:${Math.max(3, (x.v / max) * 52)}px"></i></div>`).join('');
-  const labels = slots.map((x, k) => `<span>${k === 0 ? '现在' : '+' + k * 15 + ' 分'}</span>`).join('');
+  const clock = (t) => `${hourOf(t)}:${String(minOf(t)).padStart(2, '0')}`;
+  const endOf = (t) => { let h = hourOf(t), m = minOf(t) + 15; if (m >= 60) { m -= 60; h = (h + 1) % 24; } return `${h}:${String(m).padStart(2, '0')}`; };
+  const rows = slots.map((x) => {
+    const rate = x.v * 4; // inches per hour
+    let word = '无雨', cls = 'dry', w = 0;
+    if (x.v >= 0.004) {
+      if (rate < 0.1) { word = '小雨'; cls = 'light'; w = 33; }
+      else if (rate < 0.3) { word = '中雨'; cls = 'mod'; w = 66; }
+      else { word = '大雨'; cls = 'heavy'; w = 100; }
+    }
+    return `<div class="nh-row ${cls}">
+      <span class="nh-t">${clock(x.t)}–${endOf(x.t)}</span>
+      <span class="nh-w">${word}</span>
+      <span class="nh-meter"><i style="width:${w}%"></i></span>
+      <span class="nh-a">${x.v >= 0.004 ? rainAmt(x.v) : ''}</span>
+    </div>`;
+  }).join('');
   el.innerHTML = `<div class="headline">${head}</div>
-    <div class="tile-sub" style="margin:-4px 0 10px">降雨概率 ${prob}% · 预计累计 ${rainAmt(total)}</div>
-    <div class="nh-bars">${bars}</div><div class="nh-labels">${labels}</div>`;
+    <div class="nh-rows">${rows}</div>
+    <div class="tile-sub nh-foot">这一小时的降雨概率 ${prob}%${total >= 0.004 ? ` · 合计约 ${rainAmt(total)}` : ''}</div>`;
 }
 
 /* ---------- Load ---------- */
