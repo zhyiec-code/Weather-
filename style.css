@@ -149,7 +149,7 @@ button:focus-visible, input:focus-visible, .hourly:focus-visible { outline: 2px 
 .range i { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: #ffd36b; }
 
 /* Radar */
-.radar { height: 300px; border-radius: 12px; overflow: hidden; background: #c9d6df; max-width: 100%; }
+.radar { height: 420px; border-radius: 12px; overflow: hidden; background: #c9d6df; max-width: 100%; }
 .radar-bar { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .slider-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
 .slider-wrap input { flex: 1; min-width: 0; accent-color: #fff; }

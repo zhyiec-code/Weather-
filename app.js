@@ -501,7 +501,7 @@ async function buildFrames() {
 async function initRadar() {
   if (!window.L) { $('radar').textContent = '地图库加载失败'; return; }
   // One finger scrolls the page; pinch zooms. Tap 放大 to pan the map freely in full screen.
-  map = L.map('radar', { zoomControl: false, attributionControl: true, dragging: false, tap: false }).setView([place.lat, place.lon], 8);
+  map = L.map('radar', { zoomControl: false, attributionControl: true, dragging: false, tap: false }).setView([place.lat, place.lon], 9);
   // Esri light-grey basemap (free, no key). Place labels sit in their own pane above the radar.
   const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
   L.tileLayer(ESRI + 'World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
@@ -569,7 +569,7 @@ function setPlace(p) {
   store.set('place', p);
   $('placeName').textContent = p.name;
   $('search').hidden = true;
-  if (map) { map.setView([p.lat, p.lon], 8); hereMarker.setLatLng([p.lat, p.lon]); }
+  if (map) { map.setView([p.lat, p.lon], 9); hereMarker.setLatLng([p.lat, p.lon]); }
   load(true);
 }
 $('placeBtn').addEventListener('click', () => {
