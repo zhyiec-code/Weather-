@@ -438,10 +438,10 @@ async function load(force) {
 
 /* ---------- Radar ---------- */
 // Past: observed NEXRAD composite, every 5 min for the last 50 min.
-// Future: HRRR model simulated reflectivity, every 15 min for the next 3 hours.
+// Future: HRRR model simulated reflectivity, every 15 min for 2 hours, then hourly out to 12 hours.
 const IEM = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/';
 const PAST = ['m50m', 'm45m', 'm40m', 'm35m', 'm30m', 'm25m', 'm20m', 'm15m', 'm10m', 'm05m', ''];
-const FUTURE_STEPS = 12; // 12 × 15 min = 3 h
+const FUTURE_MIN = [15, 30, 45, 60, 75, 90, 105, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720];
 let map, frames = [], radarLayers = [], frame = 0, nowIdx = PAST.length - 1, playing = null, hereMarker;
 
 async function hrrrInit() {
@@ -458,7 +458,8 @@ async function hrrrInit() {
 
 function clockLabel(ms) {
   const d = new Date(ms);
-  return d.toLocaleTimeString('zh-CN', { hour: 'numeric', minute: '2-digit', hour12: false });
+  const t = d.toLocaleTimeString('zh-CN', { hour: 'numeric', minute: '2-digit', hour12: false });
+  return d.getDate() !== new Date().getDate() ? '明天 ' + t : t;
 }
 
 async function buildFrames() {
@@ -471,8 +472,9 @@ async function buildFrames() {
   const q = 15 * 60e3;
   const now = Date.now();
   const seen = new Set();
-  for (let k = 1; k <= FUTURE_STEPS; k++) {
-    const valid = Math.round((now + k * q) / q) * q;
+  for (const m of FUTURE_MIN) {
+    const step = m > 120 ? 4 * q : q;
+    const valid = Math.round((now + m * 60e3) / step) * step;
     const fmin = Math.round((valid - init) / 60e3);
     if (fmin < 15 || fmin > 18 * 60 || seen.has(fmin)) continue;
     seen.add(fmin);
@@ -484,10 +486,12 @@ async function buildFrames() {
 
 async function initRadar() {
   if (!window.L) { $('radar').textContent = '地图库加载失败'; return; }
-  map = L.map('radar', { zoomControl: false, attributionControl: true }).setView([place.lat, place.lon], 8);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    subdomains: 'abc', maxZoom: 12, attribution: '© OpenStreetMap',
+  // One finger scrolls the page; pinch zooms. Tap 放大 to pan the map freely in full screen.
+  map = L.map('radar', { zoomControl: false, attributionControl: true, dragging: false, tap: false }).setView([place.lat, place.lon], 8);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd', maxZoom: 13, attribution: '© OpenStreetMap © CARTO',
   }).addTo(map);
+  $('radarFull').addEventListener('click', toggleFull);
   hereMarker = L.marker([place.lat, place.lon], { icon: L.divIcon({ className: '', html: '<div class="here-dot"></div>', iconSize: [14, 14] }) }).addTo(map);
   $('radarSlider').addEventListener('input', (e) => { stop(); showFrame(+e.target.value); });
   $('radarPlay').addEventListener('click', () => (playing ? stop() : play()));
@@ -497,7 +501,8 @@ async function initRadar() {
 async function loadFrames() {
   frames = await buildFrames();
   radarLayers.forEach((l) => map.removeLayer(l));
-  radarLayers = frames.map((f) => L.tileLayer(f.url, { opacity: 0, maxZoom: 12, attribution: 'NEXRAD / HRRR via IEM' }).addTo(map));
+  // Layers join the map only when first shown (plus the next one ahead), to keep data use down.
+  radarLayers = frames.map((f) => L.tileLayer(f.url, { opacity: 0, maxZoom: 13, maxNativeZoom: 11, detectRetina: true, attribution: 'NEXRAD / HRRR via IEM' }));
   $('radarSlider').max = frames.length - 1;
   $('radarNowMark').style.left = (nowIdx / (frames.length - 1)) * 100 + '%';
   showFrame(nowIdx);
@@ -505,16 +510,27 @@ async function loadFrames() {
 
 function showFrame(i) {
   frame = i;
-  radarLayers.forEach((l, k) => l.setOpacity(k === i ? 0.7 : 0));
+  [i, i + 1].forEach((k) => { if (radarLayers[k] && !map.hasLayer(radarLayers[k])) radarLayers[k].addTo(map); });
+  radarLayers.forEach((l, k) => l.setOpacity(k === i ? 0.75 : 0));
   $('radarSlider').value = i;
   const f = frames[i];
   $('radarTime').textContent = f.label;
   $('radarTime').classList.toggle('future', f.future);
   $('radar').classList.toggle('future', f.future);
 }
+function toggleFull() {
+  const card = $('radar').closest('.card');
+  const full = !card.classList.contains('full');
+  card.classList.toggle('full', full);
+  document.body.classList.toggle('noscroll', full);
+  $('radarFull').textContent = full ? '完成' : '放大';
+  if (full) { map.dragging.enable(); map.addControl(zoomCtl); } else { map.dragging.disable(); map.removeControl(zoomCtl); }
+  setTimeout(() => map.invalidateSize(), 50);
+}
+const zoomCtl = window.L ? L.control.zoom({ position: 'topright' }) : null;
 function play() {
   $('radarPlay').textContent = '暂停';
-  playing = setInterval(() => showFrame(frame >= frames.length - 1 ? 0 : frame + 1), 550);
+  playing = setInterval(() => showFrame(frame >= frames.length - 1 ? 0 : frame + 1), 600);
 }
 function stop() {
   if (playing) clearInterval(playing);
