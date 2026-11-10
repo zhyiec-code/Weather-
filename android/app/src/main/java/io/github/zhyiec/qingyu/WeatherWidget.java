@@ -33,15 +33,11 @@ public class WeatherWidget extends AppWidgetProvider {
 
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
-        final PendingResult pending = goAsync();
-        final Context app = ctx.getApplicationContext();
-        new Thread(() -> {
-            try {
-                update(app, mgr, ids);
-            } finally {
-                pending.finish();
-            }
-        }).start();
+        // Show the last good reading at once, then fetch in a background job that waits for a network
+        // and has minutes (not the ~10 s a broadcast gets) to finish.
+        render(ctx, mgr, ids);
+        WeatherJob.scheduleNow(ctx);
+        WeatherJob.schedulePeriodic(ctx);
     }
 
     @Override
@@ -64,10 +60,8 @@ public class WeatherWidget extends AppWidgetProvider {
         ctx.sendBroadcast(i);
     }
 
-    static void update(Context ctx, AppWidgetManager mgr, int[] ids) {
-        RemoteViews v = new RemoteViews(ctx.getPackageName(), R.layout.widget);
-        Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(APP_URL));
-        v.setOnClickPendingIntent(R.id.root, PendingIntent.getActivity(ctx, 0, open, PendingIntent.FLAG_IMMUTABLE));
+    /** Fetches fresh weather, saves it, and redraws. Runs inside WeatherJob. Returns false on failure. */
+    static boolean fetchAndRender(Context ctx) {
         double[] loc = location(ctx);
         try {
             String url = "https://api.open-meteo.com/v1/forecast?latitude=" + loc[0] + "&longitude=" + loc[1]
@@ -76,15 +70,32 @@ public class WeatherWidget extends AppWidgetProvider {
             double tf = cur.getDouble("temperature_2m");
             Double obs = stationTempF(ctx, loc);
             if (obs != null) tf = obs; // real thermometer beats the model estimate
-            int temp = (int) Math.round(tf);
-            int code = cur.getInt("weather_code");
-            boolean day = cur.getInt("is_day") == 1;
-            v.setTextViewText(R.id.temp, temp + "°");
+            ctx.getSharedPreferences("w", Context.MODE_PRIVATE).edit()
+                    .putInt("temp", (int) Math.round(tf))
+                    .putInt("code", cur.getInt("weather_code"))
+                    .putBoolean("day", cur.getInt("is_day") == 1)
+                    .putLong("at", System.currentTimeMillis())
+                    .apply();
+            AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
+            render(ctx, mgr, mgr.getAppWidgetIds(new ComponentName(ctx, WeatherWidget.class)));
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** Draws the last saved reading; never blanks the widget when a fetch fails. */
+    static void render(Context ctx, AppWidgetManager mgr, int[] ids) {
+        SharedPreferences sp = ctx.getSharedPreferences("w", Context.MODE_PRIVATE);
+        RemoteViews v = new RemoteViews(ctx.getPackageName(), R.layout.widget);
+        Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(APP_URL));
+        v.setOnClickPendingIntent(R.id.root, PendingIntent.getActivity(ctx, 0, open, PendingIntent.FLAG_IMMUTABLE));
+        if (sp.contains("temp")) {
+            int code = sp.getInt("code", 3);
+            boolean day = sp.getBoolean("day", true);
+            v.setTextViewText(R.id.temp, sp.getInt("temp", 0) + "°");
             v.setImageViewResource(R.id.icon, iconFor(code, day));
             v.setTextViewText(R.id.cond, condFor(code, day));
-            v.setTextViewText(R.id.place, placeName(ctx, loc));
-        } catch (Exception e) {
-            v.setTextViewText(R.id.cond, "无网络");
         }
         for (int id : ids) mgr.updateAppWidget(id, v);
     }
