@@ -2,7 +2,7 @@
 // 桌面显示当前温度，下面是天气符号。点一下打开晴雨天气 app。
 // 数据：Open-Meteo（免费，无需密钥）
 
-const APP_URL = "https://zhyiec-code.github.io/weather/";
+const APP_URL = "https://zhyiec-code.github.io/Weather-/";
 const HOME = { lat: 29.776, lon: -95.535, name: "Memorial" }; // 定位失败时用这里
 const UNIT = "F"; // 想看摄氏度改成 "C"
 
