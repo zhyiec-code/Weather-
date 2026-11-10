@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>晴雨</title>
+<meta name="description" content="免费、无广告的天气预报">
+<meta name="theme-color" content="#0f3b66">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="晴雨">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <button id="placeBtn" class="place" type="button" aria-label="更换地点">
+      <span id="placeName">Houston · Memorial</span>
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <div class="top-actions">
+      <button id="unitBtn" class="chip" type="button" aria-label="切换温度单位">°F</button>
+      <button id="refreshBtn" class="chip" type="button" aria-label="刷新">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <section id="search" class="search" hidden>
+    <form id="searchForm" autocomplete="off">
+      <input id="searchInput" type="search" placeholder="搜索城市，例如 Katy、Sugar Land" enterkeyhint="search">
+    </form>
+    <button id="locateBtn" class="row-btn" type="button">使用我现在的位置</button>
+    <button id="homeBtn" class="row-btn" type="button">Houston · Memorial（默认）</button>
+    <ul id="searchResults" class="results"></ul>
+  </section>
+
+  <div id="alerts"></div>
+
+  <section class="now" aria-live="polite">
+    <div class="now-main">
+      <div id="nowIcon" class="now-icon"></div>
+      <div>
+        <div id="nowTemp" class="now-temp">--°</div>
+        <div id="nowCond" class="now-cond">加载中…</div>
+      </div>
+    </div>
+    <div class="now-sub">
+      <span>体感 <b id="nowFeels">--°</b></span>
+      <span>最高 <b id="nowHi">--°</b></span>
+      <span>最低 <b id="nowLo">--°</b></span>
+    </div>
+    <div id="nwsLine" class="nws-line"></div>
+  </section>
+
+  <section class="card">
+    <h2>未来一小时降雨</h2>
+    <div id="nextHour" class="next-hour"></div>
+  </section>
+
+  <section class="card">
+    <h2>逐小时</h2>
+    <div id="hourly" class="hourly" tabindex="0"></div>
+  </section>
+
+  <section class="card">
+    <h2>10 天预报</h2>
+    <div id="daily" class="daily"></div>
+  </section>
+
+  <section class="card">
+    <h2>雷达</h2>
+    <div id="radar" class="radar"></div>
+    <div class="radar-bar">
+      <button id="radarPlay" class="chip" type="button">播放</button>
+      <input id="radarSlider" type="range" min="0" max="10" value="10" aria-label="雷达时间">
+      <span id="radarTime" class="radar-time">现在</span>
+    </div>
+    <p class="fine">NOAA MRMS/NEXRAD 雷达，来自 Iowa Environmental Mesonet，每 5 分钟更新。</p>
+  </section>
+
+  <section class="grid2">
+    <div class="card tile">
+      <h2>紫外线</h2>
+      <div id="uvNow" class="tile-big">--</div>
+      <div id="uvText" class="tile-sub"></div>
+      <div class="uv-scale"><i id="uvDot"></i></div>
+    </div>
+    <div class="card tile">
+      <h2>风</h2>
+      <div id="wind" class="tile-big">--</div>
+      <div id="windSub" class="tile-sub"></div>
+    </div>
+    <div class="card tile">
+      <h2>湿度</h2>
+      <div id="hum" class="tile-big">--</div>
+      <div id="humSub" class="tile-sub"></div>
+    </div>
+    <div class="card tile">
+      <h2>日出日落</h2>
+      <div id="sun" class="tile-big sm">--</div>
+      <div id="sunSub" class="tile-sub"></div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p id="updated">—</p>
+    <p>数据：Open-Meteo（美国用 NOAA HRRR/GFS 等模型最佳组合）、美国国家气象局 NWS、IEM 雷达。地图 © OpenStreetMap 贡献者。</p>
+  </footer>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
