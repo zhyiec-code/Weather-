@@ -1,18 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Icon-sized: a circle about the size of a launcher icon, temperature over a weather symbol. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/bg"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="8dp">
-    <TextView android:id="@+id/place" android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="" android:textColor="#CCFFFFFF" android:textSize="11sp" android:maxLines="1" android:ellipsize="end" />
-    <TextView android:id="@+id/temp" android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="--°" android:textColor="#FFFFFF" android:textSize="40sp" android:fontFamily="sans-serif-light" />
-    <ImageView android:id="@+id/icon" android:layout_width="44dp" android:layout_height="44dp"
-        android:src="@drawable/ic_partly_day" android:contentDescription="天气" />
-    <TextView android:id="@+id/cond" android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="" android:textColor="#E6FFFFFF" android:textSize="12sp" />
-</LinearLayout>
+    android:layout_height="match_parent">
+    <LinearLayout
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_gravity="center"
+        android:background="@drawable/bg"
+        android:gravity="center"
+        android:orientation="vertical">
+        <TextView android:id="@+id/temp" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="--°" android:textColor="#FFFFFF" android:textSize="19sp" android:includeFontPadding="false"
+            android:fontFamily="sans-serif-medium" />
+        <ImageView android:id="@+id/icon" android:layout_width="24dp" android:layout_height="24dp"
+            android:src="@drawable/ic_partly_day" android:contentDescription="天气" />
+        <TextView android:id="@+id/place" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
+        <TextView android:id="@+id/cond" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
+    </LinearLayout>
+</FrameLayout>
