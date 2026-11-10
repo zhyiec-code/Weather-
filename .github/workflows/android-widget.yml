@@ -20,24 +20,41 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
-      # Signing key: uses the repo secrets KEYSTORE_B64 / KEYSTORE_PASS when set,
-      # otherwise makes a one-off key for this build (a later build then needs a reinstall).
+      # Signing key: repo secrets KEYSTORE_B64 / KEYSTORE_PASS when set; otherwise a key made once
+      # and kept in this repo's Actions cache, so new builds install as updates over old ones.
+      - name: Restore signing key
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.qingyu-key
+          key: qingyu-signing-key-v1
       - name: Prepare signing key
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
           KEYSTORE_PASS_SECRET: ${{ secrets.KEYSTORE_PASS }}
         run: |
+          K=~/.qingyu-key
+          mkdir -p $K
           if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/ci.keystore"
+            echo "$KEYSTORE_B64" | base64 -d > $K/ci.keystore
             PASS="$KEYSTORE_PASS_SECRET"
+          elif [ -f $K/ci.keystore ]; then
+            PASS="$(cat $K/pass)"
           else
             PASS="$(openssl rand -hex 16)"
-            keytool -genkeypair -keystore "$RUNNER_TEMP/ci.keystore" -storepass "$PASS" -keypass "$PASS" \
+            echo -n "$PASS" > $K/pass
+            keytool -genkeypair -keystore $K/ci.keystore -storepass "$PASS" -keypass "$PASS" \
               -alias qingyu -keyalg RSA -keysize 2048 -validity 20000 -dname "CN=Qingyu Widget"
           fi
           echo "::add-mask::$PASS"
-          echo "KEYSTORE_FILE=$RUNNER_TEMP/ci.keystore" >> "$GITHUB_ENV"
+          echo "KEYSTORE_FILE=$HOME/.qingyu-key/ci.keystore" >> "$GITHUB_ENV"
           echo "KEYSTORE_PASS=$PASS" >> "$GITHUB_ENV"
+      - name: Save signing key
+        uses: actions/cache/save@v4
+        if: always()
+        continue-on-error: true
+        with:
+          path: ~/.qingyu-key
+          key: qingyu-signing-key-v1
       - name: Build APK
         working-directory: android
         run: gradle assembleRelease --no-daemon

@@ -615,6 +615,13 @@ if (cached && cached.key === place.lat + ',' + place.lon) {
 }
 initRadar().catch((e) => console.error(e));
 load(true);
+// "我的位置" follows the phone: re-locate on every launch.
+if (place.auto && navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition((pos) => {
+    const la = +pos.coords.latitude.toFixed(3), lo = +pos.coords.longitude.toFixed(3);
+    if (Math.abs(la - place.lat) > 0.02 || Math.abs(lo - place.lon) > 0.02) setPlace({ name: '我的位置', lat: la, lon: lo, auto: true });
+  }, () => {}, { timeout: 10000, maximumAge: 300000 });
+}
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});

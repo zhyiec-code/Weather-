@@ -6,7 +6,14 @@ import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
+import android.location.Location;
+import android.location.LocationManager;
 import android.net.Uri;
+import android.os.Build;
 import android.widget.RemoteViews;
 
 import org.json.JSONObject;
@@ -15,12 +22,14 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.List;
+import java.util.Locale;
 
 /** Home-screen widget: current temperature with a weather symbol under it. */
 public class WeatherWidget extends AppWidgetProvider {
     static final String APP_URL = "https://zhyiec-code.github.io/Weather-/";
-    // Houston · Memorial
-    static final double LAT = 29.776, LON = -95.535;
+    // Used until the phone has a location fix: Houston · Memorial
+    static final double HOME_LAT = 29.776, HOME_LON = -95.535;
 
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
@@ -49,8 +58,9 @@ public class WeatherWidget extends AppWidgetProvider {
         RemoteViews v = new RemoteViews(ctx.getPackageName(), R.layout.widget);
         Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(APP_URL));
         v.setOnClickPendingIntent(R.id.root, PendingIntent.getActivity(ctx, 0, open, PendingIntent.FLAG_IMMUTABLE));
+        double[] loc = location(ctx);
         try {
-            String url = "https://api.open-meteo.com/v1/forecast?latitude=" + LAT + "&longitude=" + LON
+            String url = "https://api.open-meteo.com/v1/forecast?latitude=" + loc[0] + "&longitude=" + loc[1]
                     + "&current=temperature_2m,weather_code,is_day&temperature_unit=fahrenheit&timezone=auto";
             JSONObject cur = new JSONObject(get(url)).getJSONObject("current");
             int temp = (int) Math.round(cur.getDouble("temperature_2m"));
@@ -59,10 +69,50 @@ public class WeatherWidget extends AppWidgetProvider {
             v.setTextViewText(R.id.temp, temp + "°");
             v.setImageViewResource(R.id.icon, iconFor(code, day));
             v.setTextViewText(R.id.cond, condFor(code, day));
+            v.setTextViewText(R.id.place, placeName(ctx, loc));
         } catch (Exception e) {
             v.setTextViewText(R.id.cond, "无网络");
         }
         for (int id : ids) mgr.updateAppWidget(id, v);
+    }
+
+    /** Newest location the phone already knows (no GPS wake-up), else the last one saved, else Memorial. */
+    static double[] location(Context ctx) {
+        SharedPreferences sp = ctx.getSharedPreferences("w", Context.MODE_PRIVATE);
+        if (ctx.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                LocationManager lm = (LocationManager) ctx.getSystemService(Context.LOCATION_SERVICE);
+                Location best = null;
+                for (String p : lm.getProviders(true)) {
+                    Location l = lm.getLastKnownLocation(p);
+                    if (l != null && (best == null || l.getTime() > best.getTime())) best = l;
+                }
+                if (best != null) {
+                    double la = Math.round(best.getLatitude() * 1000) / 1000.0;
+                    double lo = Math.round(best.getLongitude() * 1000) / 1000.0;
+                    sp.edit().putString("lat", String.valueOf(la)).putString("lon", String.valueOf(lo)).apply();
+                    return new double[]{la, lo};
+                }
+            } catch (SecurityException ignored) {
+            }
+        }
+        String la = sp.getString("lat", null), lo = sp.getString("lon", null);
+        if (la != null && lo != null) return new double[]{Double.parseDouble(la), Double.parseDouble(lo)};
+        return new double[]{HOME_LAT, HOME_LON};
+    }
+
+    static String placeName(Context ctx, double[] loc) {
+        if (loc[0] == HOME_LAT && loc[1] == HOME_LON) return "Memorial";
+        try {
+            List<Address> a = new Geocoder(ctx, Locale.US).getFromLocation(loc[0], loc[1], 1);
+            if (a != null && !a.isEmpty()) {
+                String n = a.get(0).getSubLocality();
+                if (n == null) n = a.get(0).getLocality();
+                if (n != null) return n;
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
     }
 
     static String get(String u) throws Exception {
