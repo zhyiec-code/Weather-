@@ -1,27 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Matches a launcher icon: white circle with temperature + symbol, white label underneath. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Tall pill like the system weather chip: temperature, monochrome symbol, small condition word. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:gravity="center"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
     <LinearLayout
-        android:layout_width="54dp"
-        android:layout_height="54dp"
+        android:layout_width="64dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="2dp"
         android:background="@drawable/bg"
         android:gravity="center"
         android:orientation="vertical">
         <TextView android:id="@+id/temp" android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="--°" android:textColor="#1A5DA8" android:textSize="17sp" android:includeFontPadding="false"
-            android:fontFamily="sans-serif-medium" />
-        <ImageView android:id="@+id/icon" android:layout_width="22dp" android:layout_height="22dp"
-            android:layout_marginTop="1dp"
+            android:text="--°" android:textColor="#0B1D3A" android:textSize="22sp" android:includeFontPadding="false"
+            android:fontFamily="sans-serif" />
+        <ImageView android:id="@+id/icon" android:layout_width="28dp" android:layout_height="28dp"
+            android:layout_marginTop="4dp"
             android:src="@drawable/ic_partly_day" android:contentDescription="天气" />
+        <TextView android:id="@+id/cond" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginTop="2dp" android:text="" android:textColor="#3A4A63" android:textSize="10sp"
+            android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/place" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
     </LinearLayout>
-    <TextView android:id="@+id/cond" android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:layout_marginTop="6dp" android:text="" android:textColor="#FFFFFF" android:textSize="13sp"
-        android:maxLines="1" android:ellipsize="end"
-        android:shadowColor="#99000000" android:shadowRadius="4" android:shadowDy="1" />
-    <TextView android:id="@+id/place" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
-</LinearLayout>
+</FrameLayout>
