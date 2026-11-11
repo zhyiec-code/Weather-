@@ -36,8 +36,13 @@ public class WeatherWidget extends AppWidgetProvider {
         // Show the last good reading at once, then fetch straight away inside this broadcast
         // (quick model request only). Background jobs alone proved unreliable: Android defers them
         // for hours when the app is rarely opened, which froze the widget on one reading.
-        render(ctx, mgr, ids);
-        scheduleAlarm(ctx);
+        try {
+            render(ctx, mgr, ids);
+            scheduleAlarm(ctx);
+            WeatherJob.schedulePeriodic(ctx);
+        } catch (Throwable t) {
+            note(ctx, t);
+        }
         final PendingResult pending = goAsync();
         final Context app = ctx.getApplicationContext();
         new Thread(() -> {
@@ -45,18 +50,28 @@ public class WeatherWidget extends AppWidgetProvider {
                 // Same order as the web app: station thermometer when fresh, model otherwise.
                 if (fetchModel(app, 4000) != null) WeatherJob.scheduleNow(app); // retry when network allows
                 else refineWithStation(app);
+            } catch (Throwable t) {
+                note(app, t);
             } finally {
                 pending.finish();
             }
         }).start();
-        WeatherJob.schedulePeriodic(ctx);
+    }
+
+    /** Keeps a widget problem from crashing the app; remembers it for the self-check. */
+    static void note(Context ctx, Throwable t) {
+        try {
+            ctx.getSharedPreferences("w", Context.MODE_PRIVATE).edit()
+                    .putString("crash", t.getClass().getSimpleName() + ": " + t.getMessage()).apply();
+        } catch (Throwable ignored) {
+        }
     }
 
     @Override
     public void onReceive(Context ctx, Intent intent) {
         // After an app update, redraw right away so the new look shows without waiting 30 minutes.
         if (Intent.ACTION_MY_PACKAGE_REPLACED.equals(intent.getAction())) {
-            refreshAll(ctx);
+            try { refreshAll(ctx); } catch (Throwable t) { note(ctx, t); }
             return;
         }
         super.onReceive(ctx, intent);
@@ -129,8 +144,12 @@ public class WeatherWidget extends AppWidgetProvider {
     }
 
     static void renderAll(Context ctx) {
-        AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
-        render(ctx, mgr, mgr.getAppWidgetIds(new ComponentName(ctx, WeatherWidget.class)));
+        try {
+            AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
+            render(ctx, mgr, mgr.getAppWidgetIds(new ComponentName(ctx, WeatherWidget.class)));
+        } catch (Throwable t) {
+            note(ctx, t);
+        }
     }
 
     /** Draws the last saved reading; never blanks the widget when a fetch fails. */

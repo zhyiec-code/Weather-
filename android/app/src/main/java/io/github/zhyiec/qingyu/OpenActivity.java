@@ -50,18 +50,34 @@ public class OpenActivity extends Activity {
     }
 
     private void done() {
-        // Self-check: fetch right now and say what happened, so a stuck widget explains itself.
         final android.content.Context app = getApplicationContext();
-        new Thread(() -> {
-            String err = WeatherWidget.fetchAndRender(app);
-            int t = app.getSharedPreferences("w", MODE_PRIVATE).getInt("temp", 0);
-            String msg = err == null ? "晴雨小组件 " + BuildConfig.VERSION_NAME + "：已更新 " + t + "°"
-                    : "晴雨小组件 " + BuildConfig.VERSION_NAME + " 更新失败：" + err;
-            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> Toast.makeText(app, msg, Toast.LENGTH_LONG).show());
-        }).start();
-        WeatherJob.schedulePeriodic(this);
-        WeatherWidget.scheduleAlarm(this);
-        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(WeatherWidget.APP_URL)));
+        String crash = getSharedPreferences("w", MODE_PRIVATE).getString("crash", null);
+        try {
+            new Thread(() -> {
+                String msg;
+                try {
+                    String err = WeatherWidget.fetchAndRender(app);
+                    int t = app.getSharedPreferences("w", MODE_PRIVATE).getInt("temp", 0);
+                    msg = "晴雨小组件 " + BuildConfig.VERSION_NAME + (err == null ? "：已更新 " + t + "°" : " 更新失败：" + err);
+                } catch (Throwable e) {
+                    msg = "晴雨小组件出错：" + e;
+                }
+                if (crash != null) msg += "\n上次出错：" + crash;
+                final String m = msg;
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    try { Toast.makeText(app, m, Toast.LENGTH_LONG).show(); } catch (Throwable ignored) { }
+                });
+            }).start();
+            WeatherJob.schedulePeriodic(this);
+            WeatherWidget.scheduleAlarm(this);
+        } catch (Throwable e) {
+            WeatherWidget.note(this, e);
+        }
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(WeatherWidget.APP_URL)));
+        } catch (Throwable e) {
+            WeatherWidget.note(this, e);
+        }
         finish();
     }
 }

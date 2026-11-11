@@ -38,12 +38,15 @@ public class WeatherJob extends JobService {
     @Override
     public boolean onStartJob(JobParameters params) {
         new Thread(() -> {
-            boolean ok;
+            boolean ok = true;
+            try {
             if (params.getJobId() == STATION) {
                 WeatherWidget.refineWithStation(getApplicationContext());
-                ok = true;
             } else {
                 ok = WeatherWidget.fetchAndRender(getApplicationContext()) == null;
+            }
+            } catch (Throwable t) {
+                WeatherWidget.note(getApplicationContext(), t);
             }
             jobFinished(params, !ok); // ask the system to retry later if it failed
         }).start();
