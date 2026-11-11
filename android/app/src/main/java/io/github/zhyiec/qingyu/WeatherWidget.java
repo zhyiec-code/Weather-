@@ -41,8 +41,9 @@ public class WeatherWidget extends AppWidgetProvider {
         final Context app = ctx.getApplicationContext();
         new Thread(() -> {
             try {
-                if (fetchModel(app, 7000) != null) WeatherJob.scheduleNow(app); // retry when network allows
-                else WeatherJob.scheduleStation(app); // slower station refinement off the broadcast
+                // Same order as the web app: station thermometer when fresh, model otherwise.
+                if (fetchModel(app, 4000) != null) WeatherJob.scheduleNow(app); // retry when network allows
+                else refineWithStation(app);
             } finally {
                 pending.finish();
             }
@@ -89,9 +90,7 @@ public class WeatherWidget extends AppWidgetProvider {
                     loc[0], loc[1]);
             JSONObject cur = new JSONObject(get(url, timeoutMs)).getJSONObject("current");
             SharedPreferences.Editor ed = sp.edit();
-            // Keep a station thermometer reading from the last 45 min rather than the model estimate.
-            if (System.currentTimeMillis() - sp.getLong("obsAt", 0) > 45 * 60 * 1000L)
-                ed.putInt("temp", (int) Math.round(cur.getDouble("temperature_2m")));
+            ed.putInt("temp", (int) Math.round(cur.getDouble("temperature_2m")));
             ed.putInt("code", cur.getInt("weather_code"))
                     .putBoolean("day", cur.getInt("is_day") == 1)
                     .putLong("at", System.currentTimeMillis())
@@ -170,13 +169,13 @@ public class WeatherWidget extends AppWidgetProvider {
             String key = String.format(Locale.US, "%.2f,%.2f", loc[0], loc[1]);
             String station = key.equals(sp.getString("stKey", "")) ? sp.getString("st", null) : null;
             if (station == null) {
-                JSONObject pt = new JSONObject(get("https://api.weather.gov/points/" + key));
+                JSONObject pt = new JSONObject(get("https://api.weather.gov/points/" + key, 2500));
                 String stUrl = pt.getJSONObject("properties").getString("observationStations");
-                station = new JSONObject(get(stUrl)).getJSONArray("features").getJSONObject(0)
+                station = new JSONObject(get(stUrl, 2500)).getJSONArray("features").getJSONObject(0)
                         .getJSONObject("properties").getString("stationIdentifier");
                 sp.edit().putString("stKey", key).putString("st", station).apply();
             }
-            JSONObject p = new JSONObject(get("https://api.weather.gov/stations/" + station + "/observations/latest"))
+            JSONObject p = new JSONObject(get("https://api.weather.gov/stations/" + station + "/observations/latest", 3000))
                     .getJSONObject("properties");
             long t = java.time.OffsetDateTime.parse(p.getString("timestamp")).toInstant().toEpochMilli();
             if (System.currentTimeMillis() - t > 90 * 60 * 1000L) return null;
