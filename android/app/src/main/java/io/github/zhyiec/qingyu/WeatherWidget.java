@@ -33,10 +33,20 @@ public class WeatherWidget extends AppWidgetProvider {
 
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
-        // Show the last good reading at once, then fetch in a background job that waits for a network
-        // and has minutes (not the ~10 s a broadcast gets) to finish.
+        // Show the last good reading at once, then fetch straight away inside this broadcast
+        // (quick model request only). Background jobs alone proved unreliable: Android defers them
+        // for hours when the app is rarely opened, which froze the widget on one reading.
         render(ctx, mgr, ids);
-        WeatherJob.scheduleNow(ctx);
+        final PendingResult pending = goAsync();
+        final Context app = ctx.getApplicationContext();
+        new Thread(() -> {
+            try {
+                if (fetchModel(app, 7000) != null) WeatherJob.scheduleNow(app); // retry when network allows
+                else WeatherJob.scheduleStation(app); // slower station refinement off the broadcast
+            } finally {
+                pending.finish();
+            }
+        }).start();
         WeatherJob.schedulePeriodic(ctx);
     }
 
@@ -60,40 +70,54 @@ public class WeatherWidget extends AppWidgetProvider {
         ctx.sendBroadcast(i);
     }
 
-    /**
-     * Fetches fresh weather, saves it, and redraws. Returns null on success, or a short reason on failure.
-     * The model reading is saved and drawn first; the slower station reading only refines it.
-     */
+    /** Full refresh: model reading first, then the nearest station's thermometer if it is fresh. */
     static String fetchAndRender(Context ctx) {
+        String err = fetchModel(ctx, 15000);
+        if (err != null) return err;
+        refineWithStation(ctx);
+        return null;
+    }
+
+    /** Model reading for the phone's location; saved and drawn. Null on success, else the reason. */
+    static String fetchModel(Context ctx, int timeoutMs) {
         double[] loc = location(ctx);
         SharedPreferences sp = ctx.getSharedPreferences("w", Context.MODE_PRIVATE);
-        AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
-        int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, WeatherWidget.class));
         try {
             String url = String.format(Locale.US,
                     "https://api.open-meteo.com/v1/forecast?latitude=%.3f&longitude=%.3f"
                             + "&current=temperature_2m,weather_code,is_day&temperature_unit=fahrenheit&timezone=auto",
                     loc[0], loc[1]);
-            JSONObject cur = new JSONObject(get(url, 15000)).getJSONObject("current");
-            sp.edit().putInt("temp", (int) Math.round(cur.getDouble("temperature_2m")))
-                    .putInt("code", cur.getInt("weather_code"))
+            JSONObject cur = new JSONObject(get(url, timeoutMs)).getJSONObject("current");
+            SharedPreferences.Editor ed = sp.edit();
+            // Keep a station thermometer reading from the last 45 min rather than the model estimate.
+            if (System.currentTimeMillis() - sp.getLong("obsAt", 0) > 45 * 60 * 1000L)
+                ed.putInt("temp", (int) Math.round(cur.getDouble("temperature_2m")));
+            ed.putInt("code", cur.getInt("weather_code"))
                     .putBoolean("day", cur.getInt("is_day") == 1)
                     .putLong("at", System.currentTimeMillis())
                     .remove("err")
                     .apply();
-            render(ctx, mgr, ids);
+            renderAll(ctx);
+            return null;
         } catch (Exception e) {
             String why = e.getClass().getSimpleName() + (e.getMessage() != null ? ": " + e.getMessage() : "");
             sp.edit().putString("err", why).apply();
-            render(ctx, mgr, ids);
             return why;
         }
-        Double obs = stationTempF(ctx, loc); // real thermometer beats the model estimate
+    }
+
+    static void refineWithStation(Context ctx) {
+        Double obs = stationTempF(ctx, location(ctx));
         if (obs != null) {
-            sp.edit().putInt("temp", (int) Math.round(obs)).apply();
-            render(ctx, mgr, ids);
+            ctx.getSharedPreferences("w", Context.MODE_PRIVATE).edit().putInt("temp", (int) Math.round(obs))
+                    .putLong("obsAt", System.currentTimeMillis()).apply();
+            renderAll(ctx);
         }
-        return null;
+    }
+
+    static void renderAll(Context ctx) {
+        AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
+        render(ctx, mgr, mgr.getAppWidgetIds(new ComponentName(ctx, WeatherWidget.class)));
     }
 
     /** Draws the last saved reading; never blanks the widget when a fetch fails. */

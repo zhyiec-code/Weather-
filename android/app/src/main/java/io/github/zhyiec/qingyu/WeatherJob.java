@@ -9,13 +9,19 @@ import android.content.Context;
 
 /** Background fetch for the widget: waits for any network, retries on failure, repeats every 30 min. */
 public class WeatherJob extends JobService {
-    private static final int NOW = 1, PERIODIC = 2;
+    private static final int NOW = 1, PERIODIC = 2, STATION = 3;
 
     static void scheduleNow(Context ctx) {
         JobScheduler js = ctx.getSystemService(JobScheduler.class);
         js.schedule(new JobInfo.Builder(NOW, new ComponentName(ctx, WeatherJob.class))
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setBackoffCriteria(30_000, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
+                .build());
+    }
+
+    static void scheduleStation(Context ctx) {
+        ctx.getSystemService(JobScheduler.class).schedule(new JobInfo.Builder(STATION, new ComponentName(ctx, WeatherJob.class))
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .build());
     }
 
@@ -32,7 +38,13 @@ public class WeatherJob extends JobService {
     @Override
     public boolean onStartJob(JobParameters params) {
         new Thread(() -> {
-            boolean ok = WeatherWidget.fetchAndRender(getApplicationContext()) == null;
+            boolean ok;
+            if (params.getJobId() == STATION) {
+                WeatherWidget.refineWithStation(getApplicationContext());
+                ok = true;
+            } else {
+                ok = WeatherWidget.fetchAndRender(getApplicationContext()) == null;
+            }
             jobFinished(params, !ok); // ask the system to retry later if it failed
         }).start();
         return true;
