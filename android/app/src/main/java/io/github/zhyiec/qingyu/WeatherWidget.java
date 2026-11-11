@@ -37,6 +37,7 @@ public class WeatherWidget extends AppWidgetProvider {
         // (quick model request only). Background jobs alone proved unreliable: Android defers them
         // for hours when the app is rarely opened, which froze the widget on one reading.
         render(ctx, mgr, ids);
+        scheduleAlarm(ctx);
         final PendingResult pending = goAsync();
         final Context app = ctx.getApplicationContext();
         new Thread(() -> {
@@ -59,6 +60,18 @@ public class WeatherWidget extends AppWidgetProvider {
             return;
         }
         super.onReceive(ctx, intent);
+    }
+
+    /** A 30-minute repeating alarm as a second trigger next to the system's widget update timer. */
+    static void scheduleAlarm(Context ctx) {
+        AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
+        Intent i = new Intent(ctx, WeatherWidget.class).setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, mgr.getAppWidgetIds(new ComponentName(ctx, WeatherWidget.class)));
+        PendingIntent pi = PendingIntent.getBroadcast(ctx, 7, i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        android.app.AlarmManager am = ctx.getSystemService(android.app.AlarmManager.class);
+        am.setInexactRepeating(android.app.AlarmManager.ELAPSED_REALTIME,
+                android.os.SystemClock.elapsedRealtime() + android.app.AlarmManager.INTERVAL_HALF_HOUR,
+                android.app.AlarmManager.INTERVAL_HALF_HOUR, pi);
     }
 
     static void refreshAll(Context ctx) {
@@ -100,7 +113,8 @@ public class WeatherWidget extends AppWidgetProvider {
             return null;
         } catch (Exception e) {
             String why = e.getClass().getSimpleName() + (e.getMessage() != null ? ": " + e.getMessage() : "");
-            sp.edit().putString("err", why).apply();
+            sp.edit().putString("err", why).putLong("errAt", System.currentTimeMillis()).apply();
+            renderAll(ctx);
             return why;
         }
     }
@@ -123,8 +137,14 @@ public class WeatherWidget extends AppWidgetProvider {
     static void render(Context ctx, AppWidgetManager mgr, int[] ids) {
         SharedPreferences sp = ctx.getSharedPreferences("w", Context.MODE_PRIVATE);
         RemoteViews v = new RemoteViews(ctx.getPackageName(), R.layout.widget);
-        Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(APP_URL));
-        v.setOnClickPendingIntent(R.id.root, PendingIntent.getActivity(ctx, 0, open, PendingIntent.FLAG_IMMUTABLE));
+        // Tapping goes through our own screen, which refreshes the widget and then opens 晴雨.
+        Intent open = new Intent(ctx, OpenActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        v.setOnClickPendingIntent(R.id.root, PendingIntent.getActivity(ctx, 0, open,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
+        long at = sp.getLong("at", 0), errAt = sp.getLong("errAt", 0);
+        java.text.SimpleDateFormat hm = new java.text.SimpleDateFormat("H:mm", Locale.US);
+        if (errAt > at) v.setTextViewText(R.id.updated, "⚠ " + hm.format(new java.util.Date(errAt)));
+        else if (at > 0) v.setTextViewText(R.id.updated, hm.format(new java.util.Date(at)));
         if (!sp.contains("temp")) {
             v.setTextViewText(R.id.temp, sp.contains("err") ? "!" : "…");
         } else {

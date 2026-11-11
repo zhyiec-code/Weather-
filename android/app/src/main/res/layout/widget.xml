@@ -16,8 +16,10 @@
             android:text="--°" android:textColor="#0B1D3A" android:textSize="26sp" android:includeFontPadding="false"
             android:fontFamily="sans-serif" android:letterSpacing="-0.03" />
         <ImageView android:id="@+id/icon" android:layout_width="30dp" android:layout_height="30dp"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="4dp"
             android:src="@drawable/ic_partly_day" android:contentDescription="天气" />
+        <TextView android:id="@+id/updated" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginTop="3dp" android:text="" android:textColor="#4A5A73" android:textSize="9sp" android:includeFontPadding="false" />
         <TextView android:id="@+id/cond" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
         <TextView android:id="@+id/place" android:layout_width="0dp" android:layout_height="0dp" android:visibility="gone" />
     </LinearLayout>

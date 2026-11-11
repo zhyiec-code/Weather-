@@ -60,6 +60,7 @@ public class OpenActivity extends Activity {
             new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> Toast.makeText(app, msg, Toast.LENGTH_LONG).show());
         }).start();
         WeatherJob.schedulePeriodic(this);
+        WeatherWidget.scheduleAlarm(this);
         startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(WeatherWidget.APP_URL)));
         finish();
     }
