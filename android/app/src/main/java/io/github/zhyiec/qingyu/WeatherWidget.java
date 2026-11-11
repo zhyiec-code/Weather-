@@ -60,28 +60,40 @@ public class WeatherWidget extends AppWidgetProvider {
         ctx.sendBroadcast(i);
     }
 
-    /** Fetches fresh weather, saves it, and redraws. Runs inside WeatherJob. Returns false on failure. */
-    static boolean fetchAndRender(Context ctx) {
+    /**
+     * Fetches fresh weather, saves it, and redraws. Returns null on success, or a short reason on failure.
+     * The model reading is saved and drawn first; the slower station reading only refines it.
+     */
+    static String fetchAndRender(Context ctx) {
         double[] loc = location(ctx);
+        SharedPreferences sp = ctx.getSharedPreferences("w", Context.MODE_PRIVATE);
+        AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
+        int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, WeatherWidget.class));
         try {
-            String url = "https://api.open-meteo.com/v1/forecast?latitude=" + loc[0] + "&longitude=" + loc[1]
-                    + "&current=temperature_2m,weather_code,is_day&temperature_unit=fahrenheit&timezone=auto";
-            JSONObject cur = new JSONObject(get(url)).getJSONObject("current");
-            double tf = cur.getDouble("temperature_2m");
-            Double obs = stationTempF(ctx, loc);
-            if (obs != null) tf = obs; // real thermometer beats the model estimate
-            ctx.getSharedPreferences("w", Context.MODE_PRIVATE).edit()
-                    .putInt("temp", (int) Math.round(tf))
+            String url = String.format(Locale.US,
+                    "https://api.open-meteo.com/v1/forecast?latitude=%.3f&longitude=%.3f"
+                            + "&current=temperature_2m,weather_code,is_day&temperature_unit=fahrenheit&timezone=auto",
+                    loc[0], loc[1]);
+            JSONObject cur = new JSONObject(get(url, 15000)).getJSONObject("current");
+            sp.edit().putInt("temp", (int) Math.round(cur.getDouble("temperature_2m")))
                     .putInt("code", cur.getInt("weather_code"))
                     .putBoolean("day", cur.getInt("is_day") == 1)
                     .putLong("at", System.currentTimeMillis())
+                    .remove("err")
                     .apply();
-            AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
-            render(ctx, mgr, mgr.getAppWidgetIds(new ComponentName(ctx, WeatherWidget.class)));
-            return true;
+            render(ctx, mgr, ids);
         } catch (Exception e) {
-            return false;
+            String why = e.getClass().getSimpleName() + (e.getMessage() != null ? ": " + e.getMessage() : "");
+            sp.edit().putString("err", why).apply();
+            render(ctx, mgr, ids);
+            return why;
         }
+        Double obs = stationTempF(ctx, loc); // real thermometer beats the model estimate
+        if (obs != null) {
+            sp.edit().putInt("temp", (int) Math.round(obs)).apply();
+            render(ctx, mgr, ids);
+        }
+        return null;
     }
 
     /** Draws the last saved reading; never blanks the widget when a fetch fails. */
@@ -90,7 +102,9 @@ public class WeatherWidget extends AppWidgetProvider {
         RemoteViews v = new RemoteViews(ctx.getPackageName(), R.layout.widget);
         Intent open = new Intent(Intent.ACTION_VIEW, Uri.parse(APP_URL));
         v.setOnClickPendingIntent(R.id.root, PendingIntent.getActivity(ctx, 0, open, PendingIntent.FLAG_IMMUTABLE));
-        if (sp.contains("temp")) {
+        if (!sp.contains("temp")) {
+            v.setTextViewText(R.id.temp, sp.contains("err") ? "!" : "…");
+        } else {
             int code = sp.getInt("code", 3);
             boolean day = sp.getBoolean("day", true);
             v.setTextViewText(R.id.temp, sp.getInt("temp", 0) + "°");
@@ -165,11 +179,17 @@ public class WeatherWidget extends AppWidgetProvider {
     }
 
     static String get(String u) throws Exception {
+        return get(u, 6000);
+    }
+
+    static String get(String u, int timeoutMs) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
-        c.setConnectTimeout(10000);
-        c.setReadTimeout(10000);
+        c.setConnectTimeout(timeoutMs);
+        c.setReadTimeout(timeoutMs);
         c.setRequestProperty("User-Agent", "QingyuWidget/1.6 (personal weather widget)");
         c.setRequestProperty("Accept", "application/geo+json, application/json");
+        int code = c.getResponseCode();
+        if (code != 200) throw new Exception("HTTP " + code + " " + new URL(u).getHost());
         try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream()))) {
             StringBuilder sb = new StringBuilder();
             String line;

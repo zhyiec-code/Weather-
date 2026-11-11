@@ -32,7 +32,7 @@ public class WeatherJob extends JobService {
     @Override
     public boolean onStartJob(JobParameters params) {
         new Thread(() -> {
-            boolean ok = WeatherWidget.fetchAndRender(getApplicationContext());
+            boolean ok = WeatherWidget.fetchAndRender(getApplicationContext()) == null;
             jobFinished(params, !ok); // ask the system to retry later if it failed
         }).start();
         return true;
